@@ -1,0 +1,12 @@
+{
+  "api": {
+    "API_KEY": "1225973c3fcd519fe5194e19754a43ed",
+    "API_SECRET": "d54fabcd1bfaee3c8cc00cf42c6ec7cf"
+  },
+  "db": {
+    "mongo": {
+      "URL": "mongodb://localhost:27017/Klickly"
+    }
+  },
+  "port": 3000
+}
