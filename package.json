@@ -15,5 +15,15 @@
   "bugs": {
     "url": "https://github.com/waggertron/Klickly_challenge/issues"
   },
-  "homepage": "https://github.com/waggertron/Klickly_challenge#readme"
+  "homepage": "https://github.com/waggertron/Klickly_challenge#readme",
+  "dependencies": {
+    "async": "^2.5.0",
+    "body-parser": "^1.17.2",
+    "config": "^1.26.1",
+    "express": "^4.15.3",
+    "mongodb": "^2.2.30"
+  },
+  "devDependencies": {
+    "eslint": "^4.3.0"
+  }
 }
