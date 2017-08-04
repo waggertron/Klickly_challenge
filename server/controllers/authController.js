@@ -11,20 +11,20 @@ const scopes = 'read_products';
 
 // TODO: convert cookies post to jwt and redis session
 authCtrl.Oauth = (req, res) => {
-  const shop = req.body.storeName || 'tequila-mocking-bird';
+  const storeName = req.body.storeName || 'tequila-mocking-bird';
   const nonce = `${Math.floor(Math.random() * 100000000)}`;
-  res.cookie('nonce', nonce, { httpOnly: true, maxAge: 30000000 });
-  res.cookie('shopName', shop, { httpOnly: true, maxAge: 9000000 });
-  const oauthURL = `https://${shop}.myshopify.com/admin/oauth/authorize?client_id=${API_KEY}&scope=${scopes}&redirect_uri=${redirect_uri}&state=${nonce}`;
+  res.cookie('nonce', nonce, { maxAge: 300000, httpOnly: true });
+  res.cookie('storeName', storeName, { maxAge: 9000000, httpOnly: true });
+  const oauthURL = `https://${storeName}.myshopify.com/admin/oauth/authorize?client_id=${API_KEY}&scope=${scopes}&redirect_uri=${redirect_uri}&state=${nonce}`;
   res.redirect(oauthURL);
 };
 
-authCtrl.confirmOauth = (req, res, next) => {
-  const { nonce, shopName } = req.cookies;
+authCtrl.verifyOauth = (req, res, next) => {
+  const { nonce, storeName } = req.cookies;
   let { code, hmac, shop, state, timestamp } = req.query;
-  if (nonce === state && `${shopName}.myshopify.com` === shop) {
+  if (nonce === state && `${storeName}.myshopify.com` === shop) {
     // this needs refactoring, get back to it
-    console.log('nonce valid');
+
     [code, shop, state, timestamp] = [code, shop, state, timestamp].map((val) => {
       val = val.replace(/&/g, '%26');
       val = val.replace(/%/g, '%25');
@@ -37,30 +37,38 @@ authCtrl.confirmOauth = (req, res, next) => {
     const result = hmacConfirm.digest('hex');
     if (result === hmac) {
       res.locals.code = req.query.code;
-      return next();
+      next();
+    } else {
+      res.error('hmac invalid');
     }
-    res.error('hmac invalid');
   } else {
-    return res.error('not valid');
+    res.error('not valid');
   }
 };
 
 authCtrl.requestToken = (req, res, next) => {
-  const shopName = req.cookies.shopName;
-  const tokenReqURL = `https://${shopName}.myshopify.com/admin/oauth/access_token`;
+  const { storeName } = req.cookies;
+  const tokenReqURL = `https://${storeName}.myshopify.com/admin/oauth/access_token`;
   const authData = {
     client_id: API_KEY,
     client_secret: API_SECRET,
     code: res.locals.code,
   };
   request.post(tokenReqURL, { form: authData }, (err, httpResponse, body) => {
-    if (err === null && httpResponse.statusCode === 200) {
-      const token = JSON.parse(body).access_token;
-      res.locals.shopData = { token, shopName};
-      console.log('token granted', token);
-      next();
+    if (err !== null || httpResponse.statusCode !== 200) {
+      console.log('inside request token error');
+      console.log(err, httpResponse.statusCode);
+      res.status(403).send('error accessing shopify data');
     } else {
-      res.error('Authorization Error');
+      try {
+        const token = JSON.parse(body).access_token;
+        res.locals.storeName = storeName;
+        res.locals.token = token;
+        console.log('token granted', token);
+        next();
+      } catch (e) {
+        res.error(e);
+      }
     }
   });
 };

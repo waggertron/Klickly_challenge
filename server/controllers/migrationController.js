@@ -1,93 +1,112 @@
-const config = require('config');
-// const async = require('async');
-const mongoClient = require('mongodb');
 const request = require('request');
 
-const mongoURL = config.get('db.mongo.URL');
 const migrationCtrl = {};
 
-// TODO: refactor with promises, add account id to products
-migrationCtrl.import = (req, res) => {
-  mongoClient.connect(mongoURL, (err, db) => {
-    if (err === null) {
-      const { token, shop } = res.locals.shopData;
-      const reqOptions = {
-        url: `https://${shop}.myshopify.com/admin/products.json`,
-        headers: {
-          'X-Shopify-Access-Token': token,
-        },
-      };
-      // TODO break into promises
-      request(reqOptions, (error, response, body) => {
-        if (error === null ) {
-          console.log('body from products request in import');
-          console.log(body);
-          const items = JSON.parse(body).products;
-          db.collection('accounts').insertOne({ token, shop }, (err, result) => {
-            if (err === null) {
-              items.forEach((prod) => {
-                prod.shopId = result.insertedId;
-                prod.shopName = shop;
-              });
-              db.collection('products').insertMany(items, (error, results) => {
-                if (error === null) {
-                  res.json(results);
-                  return db.close();
-                }
-                res.error('could not add products');
-                return db.close();
-              });
-            } else {
-              res.error('could not add account');
-              return db.close();
-            }
-          });
+function saveAccount(db, account) {
+  return new Promise((resolve, reject) => {
+    console.log('accountdata before save in save account: ', account);
+    if (!account.storeName || !account.token) {
+      console.log('account data not valid');
+      reject(new Error('account data not valid'));
+    } else {
+      db.collection('accounts').insertOne(account, (err) => {
+        if (err) {
+          console.log('error migrating account data');
+          reject(err);
         } else {
-          res.error('unable to connect with shopify');
-          return db.close();
+          console.log('account in success of save account', account);
+          resolve(account);
         }
       });
-    } else {
-      return res.error('Database connectivity issues');
     }
   });
-};
+}
 
-migrationCtrl.checkStore = (req, res, next) => {
-  mongoClient.connect(mongoURL, (err, db) => {
-    if (err === null) {
-      console.dir(res.locals);
-      const shop = res.locals.shopName;
-      db.collection('accounts').findOne({ shop }, (err, result) => {
-        if (err == null && result) {
-          console.log('shop found');
-          console.log('result for shop');
-          console.dir(result);
-          // res.locals.shop = shop;
-          migrationCtrl.update(req, res, db);
-          res.send('foundshop');
-        } else {
-          next();
-        }
-      });
-    } else {
-      return res.error('db connection error');
-    }
-  });
-};
-
-migrationCtrl.update = (req, res, db) => {
-  const { token, shop } = res.locals.shop;
-  console.log(token, shop);
+const getProducts = (account) => {
   const reqOptions = {
-    url: `https://${shop}.myshopify.com/admin/products.json`,
+    url: `https://${account.storeName}.myshopify.com/admin/products.json`,
     headers: {
-      'X-Shopify-Access-Token': token,
+      'X-Shopify-Access-Token': account.token,
     },
   };
-  request(reqOptions, (error, response, body) => {
-    const products = JSON.parse(body).products;
-    db.collection('products').remove({});
+  return new Promise((resolve, reject) => {
+    request(reqOptions, (error, response, body) => {
+      if (error === null && response.statusCode === 200) {
+        console.log('account in get products', account);
+        const { _id } = account;
+        const products = JSON.parse(body).products
+          .map(product => Object.assign({}, product, { accountId: _id }));
+        resolve(products);
+      } else {
+        console.log('error accessing store invetory data');
+        reject(error);
+      }
+    });
   });
 };
+
+function saveProducts(db, products) {
+  return new Promise((resolve, reject) => {
+    db.collection('products').insertMany(products, (error, results) => {
+      if (error) {
+        console.log('error mirgrating product data');
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+}
+
+function deleteProducts(db, account) {
+  return new Promise((resolve, reject) => {
+    const { _id } = account;
+    db.collection('products').remove({ accountId: _id }, (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(account);
+      }
+    });
+  });
+}
+
+function updateProducts(db, account, req, res) {
+  deleteProducts(db, account)
+    .then(getProducts)
+    .then(products => saveProducts(db, products))
+    .then(results => res.send(results))
+    .catch(err => res.error(err));
+}
+
+
+migrationCtrl.checkForAccount = (req, res, next) => {
+  const db = res.app.locals.db;
+  const storeName = req.body.storeName;
+  console.log('storeName before checking for account', storeName);
+  db.collection('accounts').findOne({ storeName: req.body.storeName }, (err, account) => {
+    if (err) {
+      res.error(err);
+    } else if (account) {
+      console.log('account found already in database');
+      updateProducts(db, account, req, res);
+    } else {
+      console.log('account not found');
+      next();
+    }
+  });
+};
+
+
+migrationCtrl.import = (req, res) => {
+  const db = res.app.locals.db;
+  const storeName = res.locals.storeName;
+  const token = res.locals.token;
+  saveAccount(db, { storeName, token })
+    .then(getProducts)
+    .then(products => saveProducts(db, products))
+    .then(results => res.json(results))
+    .catch(err => res.error(err));
+};
+
 module.exports = migrationCtrl;
