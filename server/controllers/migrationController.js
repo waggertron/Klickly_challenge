@@ -35,9 +35,13 @@ const getProducts = (account) => {
       if (error === null && response.statusCode === 200) {
         console.log('account in get products', account);
         const { _id } = account;
-        const products = JSON.parse(body).products
-          .map(product => Object.assign({}, product, { accountId: _id }));
-        resolve(products);
+        try {
+          const products = JSON.parse(body).products
+            .map(product => Object.assign({}, product, { accountId: _id }));
+          resolve(products);
+        } catch (e) {
+          reject(e);
+        }
       } else {
         console.log('error accessing store invetory data');
         reject(error);
@@ -59,14 +63,13 @@ function saveProducts(db, products) {
     });
   });
 }
+
 /**
- * deletes products with matching account id, for refresh from shopify
+ * deletes products with matching account id, for simple refresh from shopify
  * we will want to mirror the shopify data, 
  * at times we may want to add our own data such as sales or impressions, 
  * in that case we should use an async queue and update with the upsert flag
  */
-
-
 function deleteProducts(db, account) {
   return new Promise((resolve, reject) => {
     const { _id } = account;
@@ -79,6 +82,7 @@ function deleteProducts(db, account) {
     });
   });
 }
+
 // promise chain, deletes old records and updates, store name should stay static
 function updateProducts(db, account, req, res) {
   deleteProducts(db, account)
@@ -106,7 +110,6 @@ migrationCtrl.checkForAccount = (req, res, next) => {
     }
   });
 };
-
 
 migrationCtrl.import = (req, res) => {
   const db = res.app.locals.db;

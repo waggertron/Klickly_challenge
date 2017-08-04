@@ -9,7 +9,7 @@ const API_SECRET = config.get('api.SECRET');
 const redirect_uri = config.get('api.redirect_uri');
 const scopes = 'read_products';
 
-// TODO: convert cookies post to jwt and redis session
+
 authCtrl.Oauth = (req, res) => {
   const storeName = req.body.storeName || 'tequila-mocking-bird';
   const nonce = `${Math.floor(Math.random() * 100000000)}`;
@@ -24,7 +24,6 @@ authCtrl.verifyOauth = (req, res, next) => {
   let { code, hmac, shop, state, timestamp } = req.query;
   if (nonce === state && `${storeName}.myshopify.com` === shop) {
     // this needs refactoring, get back to it
-
     [code, shop, state, timestamp] = [code, shop, state, timestamp].map((val) => {
       val = val.replace(/&/g, '%26');
       val = val.replace(/%/g, '%25');
