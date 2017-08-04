@@ -9,6 +9,28 @@ const API_SECRET = config.get('api.SECRET');
 const REDIRECT_URI = config.get('api.redirect_uri');
 const scopes = 'read_products';
 
+function replace(str, isKey = false) {
+  let newStr = str.replace(/&/g, '%26');
+  newStr = newStr.replace(/%/g, '%25');
+  if (isKey) {
+    newStr = newStr.replace(/=/g, '%3D');
+  }
+  return newStr;
+}
+function verifyHMAC(queryObject) {
+  const query = Object.assign({}, queryObject);
+  const hmac = query.hmac;
+  delete query.hmac;
+  const keys = Object.keys(query).sort();
+  const result = keys.map((key) => {
+    const val = queryObject[key];
+    return `${replace(key, true)}=${replace(val)}`;
+  });
+  const serialized = result.join('&');
+  const hmacConfirm = crypto.createHmac('sha256', API_SECRET);
+  hmacConfirm.update(serialized);
+  return hmacConfirm.digest('hex') === hmac;
+}
 
 authCtrl.Oauth = (req, res) => {
   const storeName = req.body.storeName || config.get('test.store');
@@ -20,20 +42,9 @@ authCtrl.Oauth = (req, res) => {
 
 authCtrl.verifyOauth = (req, res, next) => {
   const { nonce, storeName } = req.session.key;
-  let { code, hmac, shop, state, timestamp } = req.query;
+  const { shop, state } = req.query;
   if (nonce === state && `${storeName}.myshopify.com` === shop) {
-    // this needs refactoring, get back to it
-    [code, shop, state, timestamp] = [code, shop, state, timestamp].map((val) => {
-      val = val.replace(/&/g, '%26');
-      val = val.replace(/%/g, '%25');
-      val = val.replace(/=/g, '%3D');
-      return val;
-    });
-    const serial = `code=${code}&shop=${shop}&state=${state}&timestamp=${timestamp}`;
-    const hmacConfirm = crypto.createHmac('sha256', API_SECRET);
-    hmacConfirm.update(serial);
-    const result = hmacConfirm.digest('hex');
-    if (result === hmac) {
+    if (verifyHMAC(req.query)) {
       res.locals.code = req.query.code;
       next();
     } else {
