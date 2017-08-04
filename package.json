@@ -4,7 +4,8 @@
   "description": "",
   "main": "server/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon server/server.js"
   },
   "repository": {
     "type": "git",
@@ -20,8 +21,10 @@
     "async": "^2.5.0",
     "body-parser": "^1.17.2",
     "config": "^1.26.1",
+    "cookie-parser": "^1.4.3",
     "express": "^4.15.3",
-    "mongodb": "^2.2.30"
+    "mongodb": "^2.2.30",
+    "request": "^2.81.0"
   },
   "devDependencies": {
     "eslint": "^4.3.0"
