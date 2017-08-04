@@ -2,6 +2,7 @@ const request = require('request');
 
 const migrationCtrl = {};
 
+// Thought I'd try with just vanilla mongoose instead of an orm
 function saveAccount(db, account) {
   return new Promise((resolve, reject) => {
     console.log('accountdata before save in save account: ', account);
@@ -21,7 +22,7 @@ function saveAccount(db, account) {
     }
   });
 }
-
+// retrieves products from shopify store, adds account id to query for update
 const getProducts = (account) => {
   const reqOptions = {
     url: `https://${account.storeName}.myshopify.com/admin/products.json`,
@@ -45,6 +46,7 @@ const getProducts = (account) => {
   });
 };
 
+// saves all products 
 function saveProducts(db, products) {
   return new Promise((resolve, reject) => {
     db.collection('products').insertMany(products, (error, results) => {
@@ -57,6 +59,13 @@ function saveProducts(db, products) {
     });
   });
 }
+/**
+ * deletes products with matching account id, for refresh from shopify
+ * we will want to mirror the shopify data, 
+ * at times we may want to add our own data such as sales or impressions, 
+ * in that case we should use an async queue and update with the upsert flag
+ */
+
 
 function deleteProducts(db, account) {
   return new Promise((resolve, reject) => {
@@ -70,7 +79,7 @@ function deleteProducts(db, account) {
     });
   });
 }
-
+// promise chain, deletes old records and updates, store name should stay static
 function updateProducts(db, account, req, res) {
   deleteProducts(db, account)
     .then(getProducts)
@@ -79,7 +88,8 @@ function updateProducts(db, account, req, res) {
     .catch(err => res.error(err));
 }
 
-
+// checks if already exsisting account data, if so then update from shopify
+// else, proceed along middleware chain and request token
 migrationCtrl.checkForAccount = (req, res, next) => {
   const db = res.app.locals.db;
   const storeName = req.body.storeName;
