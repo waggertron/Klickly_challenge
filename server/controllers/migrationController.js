@@ -65,31 +65,17 @@ function saveProducts(db, products) {
   });
 }
 
-/**
- * deletes products with matching account id, for simple refresh from shopify
- * we will want to mirror the shopify data, 
- * at times we may want to add our own data such as sales or impressions, 
- * in that case we should use an async queue and update with the upsert flag
- */
-function deleteProducts(db, account) {
-  return new Promise((resolve, reject) => {
-    const { _id } = account;
-    db.collection('products').remove({ accountId: _id }, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(account);
-      }
-    });
-  });
-}
-
-// promise chain, deletes old records and updates, store name should stay static
 function updateProducts(db, account, req, res) {
-  deleteProducts(db, account)
-    .then(getProducts)
-    .then(products => saveProducts(db, products))
-    .then(results => res.send(results))
+  getProducts(account)
+    .then(products =>
+      Promise.all(products.map(product =>
+        db.collection('products').updateOne({ id: product.id }, Object.assign({}, product), { upsert: true }))))
+    .then((results) => {
+      // const numUpdated = results.reduce((sum, item) => item.nModified ? sum + 1 : sum, 0);
+      // const numAdded = results.reduce((sum, item) => item.upserted ? sum + 1 : sum, 0);
+      // const message = `${numUpdated} product(s) updated and ${numAdded} products added`;
+      res.json(results);
+    })
     .catch(err => res.error(err));
 }
 
@@ -124,7 +110,8 @@ migrationCtrl.import = (req, res) => {
   saveAccount(db, { storeName, token }, req)
     .then(getProducts)
     .then(products => saveProducts(db, products))
-    .then(results => res.json(results))
+    .then(results => res.status(200).send(results.insertedCount ? `${results.insertedCount} product(s) added to Klickly!` : 'Couldn\'t find any items :('))
+    // .then(results => res.status(200).send(results.insertedCount ? 'Couldn\'t find any items :(' : `${results.insertedCount} product(s) updated`))
     .catch(err => res.error(err));
 };
 

@@ -41,9 +41,12 @@ authCtrl.Oauth = (req, res) => {
 };
 
 authCtrl.verifyOauth = (req, res, next) => {
-  const { nonce, storeName } = req.session.key;
+  const { nonce } = req.session.key;
   const { shop, state } = req.query;
-  if (nonce === state && `${storeName}.myshopify.com` === shop) {
+  if (!shop || !state) {
+    return res.redirect('/');
+  }
+  if (nonce === state) {
     if (verifyHMAC(req.query)) {
       res.locals.code = req.query.code;
       next();

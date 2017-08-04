@@ -32,6 +32,8 @@ app.use('/', express.static('client'));
 app.post('/oauth', migrationCtrl.checkForAccount, authCtrl.Oauth);
 
 app.get('/api/migrate', authCtrl.verifyOauth, authCtrl.requestToken, migrationCtrl.import);
+
+app.all('*', (req, res) => res.redirect('/'));
 mongoClient.connect(mongoURL, (err, db) => {
   if (err) {
     console.error(err);
