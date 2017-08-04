@@ -6,21 +6,20 @@ const authCtrl = {};
 
 const API_KEY = config.get('api.KEY');
 const API_SECRET = config.get('api.SECRET');
-const redirect_uri = config.get('api.redirect_uri');
+const REDIRECT_URI = config.get('api.redirect_uri');
 const scopes = 'read_products';
 
 
 authCtrl.Oauth = (req, res) => {
-  const storeName = req.body.storeName || 'tequila-mocking-bird';
+  const storeName = req.body.storeName || config.get('test.store');
   const nonce = `${Math.floor(Math.random() * 100000000)}`;
-  res.cookie('nonce', nonce, { maxAge: 300000, httpOnly: true });
-  res.cookie('storeName', storeName, { maxAge: 9000000, httpOnly: true });
-  const oauthURL = `https://${storeName}.myshopify.com/admin/oauth/authorize?client_id=${API_KEY}&scope=${scopes}&redirect_uri=${redirect_uri}&state=${nonce}`;
+  req.session.key = { nonce, storeName };
+  const oauthURL = `https://${storeName}.myshopify.com/admin/oauth/authorize?client_id=${API_KEY}&scope=${scopes}&redirect_uri=${REDIRECT_URI}&state=${nonce}`;
   res.redirect(oauthURL);
 };
 
 authCtrl.verifyOauth = (req, res, next) => {
-  const { nonce, storeName } = req.cookies;
+  const { nonce, storeName } = req.session.key;
   let { code, hmac, shop, state, timestamp } = req.query;
   if (nonce === state && `${storeName}.myshopify.com` === shop) {
     // this needs refactoring, get back to it
@@ -38,15 +37,15 @@ authCtrl.verifyOauth = (req, res, next) => {
       res.locals.code = req.query.code;
       next();
     } else {
-      res.error('hmac invalid');
+      return res.status(403).send('hmac invalid');
     }
   } else {
-    res.error('not valid');
+    return res.status(403).send('shopify response invalid');
   }
 };
 
 authCtrl.requestToken = (req, res, next) => {
-  const { storeName } = req.cookies;
+  const { storeName } = req.session.key;
   const tokenReqURL = `https://${storeName}.myshopify.com/admin/oauth/access_token`;
   const authData = {
     client_id: API_KEY,
@@ -54,7 +53,7 @@ authCtrl.requestToken = (req, res, next) => {
     code: res.locals.code,
   };
   request.post(tokenReqURL, { form: authData }, (err, httpResponse, body) => {
-    if (err !== null || httpResponse.statusCode !== 200) {
+    if (err || httpResponse.statusCode !== 200) {
       console.log('inside request token error');
       console.log(err, httpResponse.statusCode);
       res.status(403).send('error accessing shopify data');

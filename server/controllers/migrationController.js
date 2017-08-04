@@ -2,8 +2,8 @@ const request = require('request');
 
 const migrationCtrl = {};
 
-// Thought I'd try with just vanilla mongoose instead of an orm
-function saveAccount(db, account) {
+// Thought I'd try with just vanilla mongo instead of an orm
+function saveAccount(db, account, req) {
   return new Promise((resolve, reject) => {
     console.log('accountdata before save in save account: ', account);
     if (!account.storeName || !account.token) {
@@ -15,6 +15,7 @@ function saveAccount(db, account) {
           console.log('error migrating account data');
           reject(err);
         } else {
+          req.session.key = account;
           console.log('account in success of save account', account);
           resolve(account);
         }
@@ -96,26 +97,31 @@ function updateProducts(db, account, req, res) {
 // else, proceed along middleware chain and request token
 migrationCtrl.checkForAccount = (req, res, next) => {
   const db = res.app.locals.db;
-  const storeName = req.body.storeName;
-  console.log('storeName before checking for account', storeName);
-  db.collection('accounts').findOne({ storeName: req.body.storeName }, (err, account) => {
-    if (err) {
-      res.error(err);
-    } else if (account) {
-      console.log('account found already in database');
-      updateProducts(db, account, req, res);
-    } else {
-      console.log('account not found');
-      next();
-    }
-  });
+  if (req.session.key) {
+    console.log(`session found: ${JSON.stringify(req.session.key)}`);
+    const { _id, storeName, token } = req.session.key;
+    updateProducts(db, { _id, storeName, token }, req, res);
+  } else {
+    db.collection('accounts').findOne({ storeName: req.body.storeName }, (err, account) => {
+      if (err) {
+        res.error(err);
+      } else if (account) {
+        console.log('account found already in database');
+        req.session.key = account;
+        updateProducts(db, account, req, res);
+      } else {
+        console.log('account not found');
+        next();
+      }
+    });
+  }
 };
 
 migrationCtrl.import = (req, res) => {
   const db = res.app.locals.db;
   const storeName = res.locals.storeName;
   const token = res.locals.token;
-  saveAccount(db, { storeName, token })
+  saveAccount(db, { storeName, token }, req)
     .then(getProducts)
     .then(products => saveProducts(db, products))
     .then(results => res.json(results))

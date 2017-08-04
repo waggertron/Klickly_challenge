@@ -9,6 +9,12 @@
       "URL": "mongodb://localhost:27017/Klickly"
     }
   },
+  "redis": {
+    "SECRET": "I am the master of my fate, I am the captain of my soul",
+    "HOST": "localhost",
+    "PORT": 6379,
+    "TTL":  260
+  },
   "test": {
     "store": "tequila-mocking-bird"
   },
